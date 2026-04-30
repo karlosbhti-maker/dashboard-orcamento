@@ -285,24 +285,26 @@
 
 <script>
 // ─── CONFIGURAÇÃO ── altere apenas esta linha se mudar a planilha ───
-const SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQcgeHYoqpMtyGnzFVn3ci1vvAP4_PzKB_4RKpjTQ1ttC-QFJsipUfxGirurFfWCmPE9wWNwtAPxJQd/pub?gid=1727878372&single=true&output=csv";
+<script>
+// --- CONFIGURAÇÃO — altere apenas esta linha se mudar a planilha ---
+const URL_CSV_DAS_PLANILHAS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQcgeHYoqpmtyGnzFVn3ci1vvAP4_PzKB_4RKpjTQ1ttC-QFJsipUfxGirurFfWCmPE9wWNwtAPxJQd/pub?gid=1727878372&single=true&output=csv";
 
-// Múltiplos proxies públicos — tenta um por um até funcionar
+// Múltiplos proxies públicos — tente um por um até funcionar
 const PROXIES = [
-  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://thingproxy.freeboard.io/fetch/${url}`,
-  url => `https://cors-anywhere.herokuapp.com/${url}`,
+  URL => `https://corsproxy.io/?${encodeURIComponent(URL)}`,
+  URL => `https://api.allorigins.win/raw?url=${encodeURIComponent(URL)}`,
+  URL => `https://thingproxy.freeboard.io/fetch/${URL}`,
+  URL => `https://cors-anywhere.herokuapp.com/${URL}`,
 ];
 
-const CAT_ICONS = {
-  'Condominiais':'🏢','D.E.A.':'💧','Diárias e Passagens':'✈️',
-  'Equip e Material Permanente':'🔧','Imóvel':'🏗️',
-  'Material de Consumo':'🧪','Pessoas':'👥','Serviços':'⚙️','Tributos':'📋'
+const ICONES_CATEGORIA = {
+  'Condomínios':'🏢', 'DEA':'💧', 'Diárias e Passagens':'✈️',
+  'Equip e Material Permanente':'🔧', 'Imóvel':'🏗️',
+  'Material de Consumo':'🖊️', 'Pessoas':'👥', 'Serviços':'⚙️', 'Homenagens':'📜'
 };
 
-let DATA = {};
-let activeFilter = 'Todos';
+let DADOS = {};
+let filtroAtivo = 'Todos';
 
 // ─── HELPERS ───
 function fmt(v){
