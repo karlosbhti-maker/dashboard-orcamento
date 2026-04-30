@@ -287,8 +287,13 @@
 // ─── CONFIGURAÇÃO ── altere apenas esta linha se mudar a planilha ───
 const SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQcgeHYoqpMtyGnzFVn3ci1vvAP4_PzKB_4RKpjTQ1ttC-QFJsipUfxGirurFfWCmPE9wWNwtAPxJQd/pub?gid=1727878372&single=true&output=csv";
 
-// Proxy público para contornar CORS do Google Sheets
-const PROXY = "https://corsproxy.io/?";
+// Múltiplos proxies públicos — tenta um por um até funcionar
+const PROXIES = [
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://thingproxy.freeboard.io/fetch/${url}`,
+  url => `https://cors-anywhere.herokuapp.com/${url}`,
+];
 
 const CAT_ICONS = {
   'Condominiais':'🏢','D.E.A.':'💧','Diárias e Passagens':'✈️',
@@ -409,17 +414,30 @@ async function loadData(){
   document.getElementById('errorBanner').classList.remove('show');
 
   try {
-    // Try direct first, then proxy
-    let text;
+    let text = null;
+    let lastErr = '';
+
+    // 1) Tenta direto (funciona se não houver CORS)
     try {
       const r = await fetch(SHEETS_CSV_URL, {cache:'no-cache'});
-      if(!r.ok) throw new Error('direct failed');
-      text = await r.text();
-    } catch {
-      const r2 = await fetch(PROXY + encodeURIComponent(SHEETS_CSV_URL), {cache:'no-cache'});
-      if(!r2.ok) throw new Error(`HTTP ${r2.status}`);
-      text = await r2.text();
+      if(r.ok){ text = await r.text(); }
+    } catch(e){ lastErr = e.message; }
+
+    // 2) Tenta cada proxy em sequência até um funcionar
+    if(!text){
+      for(const makeUrl of PROXIES){
+        try {
+          const r = await fetch(makeUrl(SHEETS_CSV_URL), {cache:'no-cache'});
+          if(r.ok){
+            const t = await r.text();
+            // Valida que parece um CSV real (tem vírgula e mais de 1 linha)
+            if(t.includes(',') && t.split('\n').length > 2){ text = t; break; }
+          }
+        } catch(e){ lastErr = e.message; }
+      }
     }
+
+    if(!text) throw new Error('Nenhum proxy conseguiu carregar os dados. ' + lastErr);
 
     DATA = parseCSV(text);
     activeFilter = 'Todos';
