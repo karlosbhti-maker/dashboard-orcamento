@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Orçamentário — Análise de Empenhos</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0d1117;
+    --paper: #f7f4ef;
+    --cream: #ede9e2;
+    --gold: #c9a84c;
+    --gold-light: #e8d49a;
+    --gold-pale: #f5edcc;
+    --red: #c0392b;
+    --red-pale: #fbeae8;
+    --green: #1d6b47;
+    --green-pale: #e8f5ee;
+    --blue: #1a3a5c;
+    --blue-mid: #2563a8;
+    --blue-pale: #e8f0fa;
+    --mid: #6b7280;
+    --border: rgba(13,17,23,0.1);
+    --shadow: 0 2px 16px rgba(13,17,23,0.08);
+    --shadow-lg: 0 8px 40px rgba(13,17,23,0.12);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 15px; }
+  body { background: var(--paper); color: var(--ink); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+
+  /* HEADER */
+  .site-header {
+    background: var(--ink); color: #fff;
+    padding: 0 2.5rem;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 64px; position: sticky; top: 0; z-index: 100;
+    border-bottom: 2px solid var(--gold);
+  }
+  .logo { font-family: 'DM Serif Display', serif; font-size: 1.2rem; color: #fff; display: flex; align-items: center; gap: .7rem; }
+  .logo-badge { background: var(--gold); color: var(--ink); font-family: 'DM Sans', sans-serif; font-size: .65rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; padding: .18rem .5rem; border-radius: 3px; }
+  .header-right { display: flex; align-items: center; gap: 1.2rem; }
+  .refresh-btn {
+    display: flex; align-items: center; gap: .5rem;
+    background: var(--gold); color: var(--ink);
+    border: none; border-radius: 6px; padding: .45rem 1rem;
+    font-family: 'DM Sans', sans-serif; font-size: .85rem; font-weight: 600;
+    cursor: pointer; transition: all .2s; white-space: nowrap;
+  }
+  .refresh-btn:hover { background: var(--gold-light); transform: translateY(-1px); }
+  .refresh-btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+  .header-date { color: rgba(255,255,255,.55); font-size: .8rem; }
+
+  /* LOADING */
+  .loading-screen {
+    position: fixed; inset: 0; background: var(--paper);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 500; gap: 1.2rem;
+  }
+  .loading-screen.hidden { display: none; }
+  .spinner {
+    width: 44px; height: 44px; border: 3px solid var(--cream);
+    border-top-color: var(--gold); border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-family: 'DM Serif Display', serif; font-size: 1.1rem; color: var(--mid); }
+  .loading-sub { font-size: .82rem; color: var(--mid); }
+
+  /* ERROR */
+  .error-banner {
+    background: var(--red-pale); border: 1px solid #f5c6c2; border-radius: 8px;
+    padding: 1rem 1.4rem; margin-bottom: 1.4rem;
+    display: none; align-items: center; gap: .7rem; font-size: .88rem; color: var(--red);
+  }
+  .error-banner.show { display: flex; }
+
+  /* LAST UPDATE */
+  .update-tag {
+    display: inline-flex; align-items: center; gap: .4rem;
+    background: var(--green-pale); color: var(--green);
+    border: 1px solid #b7dfc9; border-radius: 20px;
+    font-size: .75rem; font-weight: 600; padding: .2rem .7rem;
+    margin-left: .5rem;
+  }
+  .update-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* PAGE */
+  .page { max-width: 1320px; margin: 0 auto; padding: 2rem 2rem 4rem; }
+
+  /* HERO */
+  .hero { margin-bottom: 2rem; }
+  .hero-title { font-family: 'DM Serif Display', serif; font-size: 2rem; font-weight: 400; margin-bottom: .3rem; line-height: 1.2; }
+  .hero-sub { color: var(--mid); font-size: .9rem; margin-bottom: 1.6rem; }
+
+  /* KPI */
+  .kpi-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 1rem; }
+  .kpi { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 1.2rem 1.4rem; position: relative; overflow: hidden; box-shadow: var(--shadow); transition: transform .2s, box-shadow .2s; }
+  .kpi:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+  .kpi::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+  .kpi.total::before { background: var(--blue-mid); }
+  .kpi.liquidado::before { background: var(--green); }
+  .kpi.pendente::before { background: var(--gold); }
+  .kpi.pct::before { background: var(--mid); }
+  .kpi-label { font-size:.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:var(--mid); margin-bottom:.5rem; }
+  .kpi-value { font-family:'DM Serif Display',serif; font-size:1.65rem; line-height:1; }
+  .kpi.total .kpi-value { color:var(--blue-mid); }
+  .kpi.liquidado .kpi-value { color:var(--green); }
+  .kpi.pendente .kpi-value { color:var(--gold); }
+  .kpi-sub { font-size:.75rem; color:var(--mid); margin-top:.3rem; }
+
+  /* TOOLBAR */
+  .toolbar { display:flex; align-items:center; gap:1rem; margin-bottom:1.4rem; flex-wrap:wrap; }
+  .search-wrap { position:relative; flex:1; min-width:220px; }
+  .search-wrap svg { position:absolute; left:.75rem; top:50%; transform:translateY(-50%); color:var(--mid); pointer-events:none; }
+  .search-input { width:100%; padding:.55rem .75rem .55rem 2.3rem; border:1px solid var(--border); border-radius:8px; background:#fff; font-family:'DM Sans',sans-serif; font-size:.88rem; color:var(--ink); outline:none; transition:border .2s; }
+  .search-input:focus { border-color:var(--gold); }
+  .filter-group { display:flex; gap:.5rem; flex-wrap:wrap; }
+  .filter-btn { padding:.4rem .9rem; border-radius:20px; border:1.5px solid var(--border); background:#fff; font-family:'DM Sans',sans-serif; font-size:.8rem; font-weight:500; color:var(--ink); cursor:pointer; transition:all .15s; white-space:nowrap; }
+  .filter-btn:hover { border-color:var(--gold); color:var(--gold); }
+  .filter-btn.active { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .sort-select { padding:.45rem .8rem; border:1px solid var(--border); border-radius:8px; background:#fff; font-family:'DM Sans',sans-serif; font-size:.85rem; color:var(--ink); cursor:pointer; outline:none; }
+
+  /* ALERT */
+  .alert-strip { background:#fff8e8; border:1px solid var(--gold-light); border-radius:8px; padding:.7rem 1.1rem; margin-bottom:1.4rem; display:flex; align-items:center; gap:.6rem; font-size:.83rem; color:#7a5c00; }
+  .alert-strip svg { flex-shrink:0; }
+
+  /* TWO COL */
+  .two-col { display:grid; grid-template-columns:340px 1fr; gap:1.4rem; margin-bottom:1.4rem; align-items:start; }
+
+  /* RANK */
+  .side-panel { background:#fff; border:1px solid var(--border); border-radius:10px; overflow:hidden; box-shadow:var(--shadow); margin-bottom:1.4rem; }
+  .side-panel-header { padding:1rem 1.4rem; background:var(--ink); color:#fff; display:flex; align-items:center; gap:.5rem; font-family:'DM Serif Display',serif; font-size:1rem; }
+  .rank-list { list-style:none; }
+  .rank-item { display:flex; align-items:center; gap:.8rem; padding:.8rem 1.2rem; border-bottom:1px solid var(--border); transition:background .12s; }
+  .rank-item:last-child { border-bottom:none; }
+  .rank-item:hover { background:var(--cream); }
+  .rank-num { font-family:'DM Serif Display',serif; font-size:1.1rem; color:var(--gold); min-width:24px; text-align:center; }
+  .rank-info { flex:1; min-width:0; }
+  .rank-name { font-weight:500; font-size:.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rank-cat { font-size:.72rem; color:var(--mid); }
+  .rank-val { font-family:'DM Serif Display',serif; font-size:1rem; color:var(--red); white-space:nowrap; }
+
+  /* CATEGORY */
+  .category-section { margin-bottom:1.4rem; }
+  .cat-header { display:flex; align-items:center; gap:.8rem; padding:.75rem 1.2rem; background:#fff; border:1px solid var(--border); border-radius:10px 10px 0 0; cursor:pointer; user-select:none; transition:background .15s; }
+  .cat-header:hover { background:var(--cream); }
+  .cat-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0; }
+  .cat-name { font-family:'DM Serif Display',serif; font-size:1.05rem; flex:1; }
+  .cat-badges { display:flex; gap:.5rem; align-items:center; margin-left:auto; }
+  .badge { font-size:.7rem; font-weight:600; padding:.18rem .55rem; border-radius:4px; white-space:nowrap; }
+  .badge-emp { background:var(--blue-pale); color:var(--blue); }
+  .badge-liq { background:var(--green-pale); color:var(--green); }
+  .badge-pend { background:var(--gold-pale); color:#7a5c00; }
+  .badge-pend.high { background:var(--red-pale); color:var(--red); }
+  .chevron { transition:transform .25s; flex-shrink:0; color:var(--mid); }
+  .cat-header.open .chevron { transform:rotate(180deg); }
+  .cat-body { border:1px solid var(--border); border-top:none; border-radius:0 0 10px 10px; overflow:hidden; display:none; }
+  .cat-body.open { display:block; }
+
+  /* TABLE */
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  thead th { padding:.7rem 1.1rem; text-align:left; font-size:.7rem; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--mid); background:var(--cream); border-bottom:1px solid var(--border); white-space:nowrap; }
+  thead th:not(:first-child) { text-align:right; }
+  tbody tr { border-bottom:1px solid var(--border); transition:background .12s; }
+  tbody tr:last-child { border-bottom:none; }
+  tbody tr:hover { background:#fafaf8; }
+  td { padding:.7rem 1.1rem; vertical-align:middle; }
+  td:not(:first-child) { text-align:right; font-variant-numeric:tabular-nums; }
+  .supplier-name { font-weight:500; max-width:340px; }
+
+  /* PROGRESS */
+  .prog-cell { min-width:130px; }
+  .prog-wrap { display:flex; align-items:center; gap:.5rem; }
+  .prog-bar-bg { flex:1; height:5px; background:var(--cream); border-radius:4px; overflow:hidden; }
+  .prog-bar-fill { height:100%; border-radius:4px; }
+  .fill-green { background:var(--green); }
+  .fill-gold { background:var(--gold); }
+  .fill-red { background:var(--red); }
+  .prog-pct { font-size:.75rem; color:var(--mid); white-space:nowrap; min-width:35px; }
+  .val-pend { font-weight:600; }
+  .val-pend.high { color:var(--red); }
+  .val-pend.medium { color:#b45309; }
+  .val-pend.low { color:var(--green); }
+  .val-pend.zero { color:var(--mid); }
+
+  /* FOOTER */
+  .footer-note { text-align:center; color:var(--mid); font-size:.78rem; margin-top:3rem; padding-top:1.5rem; border-top:1px solid var(--border); }
+
+  /* RESPONSIVE */
+  @media(max-width:900px){ .kpi-bar{grid-template-columns:repeat(2,1fr);} .two-col{grid-template-columns:1fr;} }
+  @media(max-width:600px){ .site-header{padding:0 1rem;} .page{padding:1rem 1rem 3rem;} .kpi-bar{grid-template-columns:1fr 1fr;} .hero-title{font-size:1.4rem;} }
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="loading-screen" id="loadingScreen">
+  <div class="spinner"></div>
+  <div class="loading-text">Carregando dados...</div>
+  <div class="loading-sub">Buscando planilha atualizada do Google Sheets</div>
+</div>
+
+<!-- HEADER -->
+<header class="site-header">
+  <div class="logo">
+    <span class="logo-badge">COGEPLAN</span>
+    Dashboard Orçamentário
+  </div>
+  <div class="header-right">
+    <span class="header-date" id="headerDate"></span>
+    <button class="refresh-btn" id="refreshBtn" onclick="loadData()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Atualizar Dados
+    </button>
+  </div>
+</header>
+
+<!-- PAGE -->
+<main class="page">
+  <div class="hero">
+    <h1 class="hero-title">Análise de Empenhos, Liquidações e A Liquidar</h1>
+    <p class="hero-sub" id="heroSub">Carregando...</p>
+  </div>
+
+  <!-- ERROR -->
+  <div class="error-banner" id="errorBanner">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span id="errorText"></span>
+  </div>
+
+  <!-- KPI -->
+  <div class="kpi-bar">
+    <div class="kpi total"><div class="kpi-label">Total Empenhado</div><div class="kpi-value" id="kpiEmp">—</div><div class="kpi-sub" id="kpiEmpSub">—</div></div>
+    <div class="kpi liquidado"><div class="kpi-label">Total Liquidado</div><div class="kpi-value" id="kpiLiq">—</div><div class="kpi-sub" id="kpiLiqSub">—</div></div>
+    <div class="kpi pendente"><div class="kpi-label">Total a Liquidar</div><div class="kpi-value" id="kpiPend">—</div><div class="kpi-sub" id="kpiPendSub">—</div></div>
+    <div class="kpi pct"><div class="kpi-label">% Executado</div><div class="kpi-value" id="kpiPct">—</div><div class="kpi-sub" id="kpiPctSub">—</div></div>
+  </div>
+
+  <br>
+
+  <!-- ALERT -->
+  <div class="alert-strip" id="alertStrip" style="display:none">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span id="alertText"></span>
+  </div>
+
+  <!-- TWO COL -->
+  <div class="two-col">
+    <div class="side-panel">
+      <div class="side-panel-header">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        Top 10 — Maiores Pendências
+      </div>
+      <ul class="rank-list" id="rankList"></ul>
+    </div>
+
+    <div>
+      <div class="toolbar">
+        <div class="search-wrap">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="search-input" type="text" placeholder="Buscar fornecedor..." id="searchInput" oninput="filterRender()">
+        </div>
+        <select class="sort-select" id="sortSelect" onchange="filterRender()">
+          <option value="a_liquidar_desc">Maior a Liquidar</option>
+          <option value="a_liquidar_asc">Menor a Liquidar</option>
+          <option value="empenhos_desc">Maior Empenho</option>
+          <option value="pct_asc">Menor % Exec.</option>
+          <option value="pct_desc">Maior % Exec.</option>
+        </select>
+      </div>
+      <div class="filter-group" id="filterGroup" style="margin-bottom:1rem"></div>
+    </div>
+  </div>
+
+  <!-- CATEGORIES -->
+  <div id="categorySections"></div>
+
+  <div class="footer-note">
+    Dashboard alimentado automaticamente via Google Sheets · Somente o administrador atualiza a planilha base.<br>
+    Os demais usuários visualizam sempre os dados mais recentes ao abrir ou ao clicar em <strong>Atualizar Dados</strong>.
+  </div>
+</main>
+
+<script>
+// ─── CONFIGURAÇÃO ── altere apenas esta linha se mudar a planilha ───
+const SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQcgeHYoqpMtyGnzFVn3ci1vvAP4_PzKB_4RKpjTQ1ttC-QFJsipUfxGirurFfWCmPE9wWNwtAPxJQd/pub?gid=1727878372&single=true&output=csv";
+
+// Proxy público para contornar CORS do Google Sheets
+const PROXY = "https://corsproxy.io/?";
+
+const CAT_ICONS = {
+  'Condominiais':'🏢','D.E.A.':'💧','Diárias e Passagens':'✈️',
+  'Equip e Material Permanente':'🔧','Imóvel':'🏗️',
+  'Material de Consumo':'🧪','Pessoas':'👥','Serviços':'⚙️','Tributos':'📋'
+};
+
+let DATA = {};
+let activeFilter = 'Todos';
+
+// ─── HELPERS ───
+function fmt(v){
+  if(Math.abs(v)<0.005) return 'R$ —';
+  return 'R$ '+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function fmtShort(v){
+  if(Math.abs(v)<0.005) return '—';
+  if(Math.abs(v)>=1e6) return 'R$ '+(v/1e6).toFixed(2).replace('.',',')+'M';
+  if(Math.abs(v)>=1e3) return 'R$ '+(v/1e3).toFixed(1).replace('.',',')+'K';
+  return 'R$ '+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function parseBR(s){
+  if(!s) return 0;
+  s = String(s).trim();
+  // Handle both Brazilian (1.234,56) and US (1234.56) formats
+  if(s.includes(',') && s.includes('.')){
+    // Brazilian: remove dots, replace comma with dot
+    s = s.replace(/\./g,'').replace(',','.');
+  } else if(s.includes(',') && !s.includes('.')){
+    s = s.replace(',','.');
+  }
+  return parseFloat(s)||0;
+}
+function pct(liq,emp){ if(!emp||Math.abs(emp)<0.01) return 0; return Math.min(100,Math.max(0,(liq/emp)*100)); }
+function pendClass(v,emp){
+  if(Math.abs(v)<0.01) return 'zero';
+  const r=emp>0?v/emp:0;
+  if(r>0.5||v>100000) return 'high';
+  if(r>0.2||v>20000) return 'medium';
+  return 'low';
+}
+function fillClass(p){ if(p>=90) return 'fill-green'; if(p>=50) return 'fill-gold'; return 'fill-red'; }
+
+// ─── PARSE CSV ───
+function parseCSV(text){
+  const lines = text.split('\n').filter(l=>l.trim());
+  const headers = splitCSVLine(lines[0]);
+  
+  // Find column indexes (flexible matching)
+  const find = (...terms) => {
+    const idx = headers.findIndex(h => terms.some(t => h.toLowerCase().includes(t.toLowerCase())));
+    return idx;
+  };
+  
+  const iCat  = find('classif','cogeplan');
+  const iForn = find('favorec','ne c');
+  const iEmp  = find('empenho');
+  const iLiq  = find('liquidaç','liquidac');
+  const iPend = find('liquidar','pend');
+
+  if(iCat<0||iForn<0||iEmp<0){
+    throw new Error(`Colunas não encontradas. Verifique se a planilha tem: Classificação_Cogeplan, NE CCor - Favorecido, Empenhos, Liquidações, A Liquidar.\nColunas encontradas: ${headers.join(', ')}`);
+  }
+
+  const map = {};
+  for(let i=1;i<lines.length;i++){
+    const cols = splitCSVLine(lines[i]);
+    if(!cols[iCat]) continue;
+    let cat = cols[iCat].trim();
+    if(!cat) continue;
+    // normalize
+    if(cat.toLowerCase()==='diárias e passagens'||cat.toLowerCase()==='diarias e passagens') cat='Diárias e Passagens';
+
+    const forn = (cols[iForn]||'').trim();
+    if(!forn) continue;
+    const emp  = parseBR(cols[iEmp]);
+    const liq  = parseBR(iLiq>=0?cols[iLiq]:0);
+    const pend = iPend>=0 ? parseBR(cols[iPend]) : emp-liq;
+
+    const key = cat+'|||'+forn;
+    if(!map[key]) map[key]={categoria:cat,fornecedor:forn,empenhos:0,liquidacoes:0,a_liquidar:0};
+    map[key].empenhos   += emp;
+    map[key].liquidacoes+= liq;
+    map[key].a_liquidar += pend;
+  }
+
+  const result={};
+  Object.values(map).forEach(r=>{
+    r.empenhos   = Math.round(r.empenhos*100)/100;
+    r.liquidacoes= Math.round(r.liquidacoes*100)/100;
+    r.a_liquidar = Math.round(r.a_liquidar*100)/100;
+    if(Math.abs(r.empenhos)<0.01) return;
+    if(!result[r.categoria]) result[r.categoria]=[];
+    result[r.categoria].push(r);
+  });
+  return result;
+}
+
+function splitCSVLine(line){
+  const result=[]; let cur=''; let inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){inQ=!inQ;}
+    else if(c===','&&!inQ){result.push(cur.trim().replace(/^"|"$/g,'')); cur='';}
+    else{cur+=c;}
+  }
+  result.push(cur.trim().replace(/^"|"$/g,''));
+  return result;
+}
+
+// ─── LOAD DATA ───
+async function loadData(){
+  const btn=document.getElementById('refreshBtn');
+  btn.disabled=true;
+  btn.innerHTML=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin .8s linear infinite"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Atualizando...`;
+
+  document.getElementById('loadingScreen').classList.remove('hidden');
+  document.getElementById('errorBanner').classList.remove('show');
+
+  try {
+    // Try direct first, then proxy
+    let text;
+    try {
+      const r = await fetch(SHEETS_CSV_URL, {cache:'no-cache'});
+      if(!r.ok) throw new Error('direct failed');
+      text = await r.text();
+    } catch {
+      const r2 = await fetch(PROXY + encodeURIComponent(SHEETS_CSV_URL), {cache:'no-cache'});
+      if(!r2.ok) throw new Error(`HTTP ${r2.status}`);
+      text = await r2.text();
+    }
+
+    DATA = parseCSV(text);
+    activeFilter = 'Todos';
+
+    const now = new Date();
+    document.getElementById('heroSub').innerHTML =
+      `Dados atualizados em ${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+      <span class="update-tag"><span class="update-dot"></span>ao vivo</span>`;
+
+    render();
+  } catch(err){
+    document.getElementById('errorBanner').classList.add('show');
+    document.getElementById('errorText').innerHTML =
+      `<strong>Erro ao carregar dados:</strong> ${err.message}. Verifique se a planilha está publicada corretamente no Google Sheets.`;
+    document.getElementById('heroSub').textContent = 'Falha ao carregar — tente novamente.';
+  }
+
+  document.getElementById('loadingScreen').classList.add('hidden');
+  btn.disabled=false;
+  btn.innerHTML=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Atualizar Dados`;
+}
+
+// ─── AGGREGATES ───
+function getCatTotals(){
+  const t={};
+  for(const[cat,rows] of Object.entries(DATA)){
+    t[cat]=rows.reduce((a,r)=>({empenhos:a.empenhos+r.empenhos,liquidacoes:a.liquidacoes+r.liquidacoes,a_liquidar:a.a_liquidar+r.a_liquidar}),{empenhos:0,liquidacoes:0,a_liquidar:0});
+  }
+  return t;
+}
+function getGlobal(){
+  return Object.values(getCatTotals()).reduce((a,v)=>({empenhos:a.empenhos+v.empenhos,liquidacoes:a.liquidacoes+v.liquidacoes,a_liquidar:a.a_liquidar+v.a_liquidar}),{empenhos:0,liquidacoes:0,a_liquidar:0});
+}
+function getAllRows(){ return Object.values(DATA).flat(); }
+
+// ─── RENDER ───
+function render(){
+  renderKPIs(); renderRanking(); renderAlert(); renderFilterBtns(); filterRender();
+}
+
+function renderKPIs(){
+  const g=getGlobal();
+  const p=pct(g.liquidacoes,g.empenhos);
+  document.getElementById('kpiEmp').textContent=fmtShort(g.empenhos);
+  document.getElementById('kpiLiq').textContent=fmtShort(g.liquidacoes);
+  document.getElementById('kpiPend').textContent=fmtShort(g.a_liquidar);
+  document.getElementById('kpiPct').textContent=p.toFixed(1).replace('.',',')+' %';
+  document.getElementById('kpiEmpSub').textContent=fmt(g.empenhos);
+  document.getElementById('kpiLiqSub').textContent=fmt(g.liquidacoes);
+  document.getElementById('kpiPendSub').textContent=fmt(g.a_liquidar);
+  document.getElementById('kpiPctSub').textContent=`${(100-p).toFixed(1).replace('.',',')}% ainda pendente`;
+}
+
+function renderRanking(){
+  const all=getAllRows().filter(r=>r.a_liquidar>0.01);
+  all.sort((a,b)=>b.a_liquidar-a.a_liquidar);
+  document.getElementById('rankList').innerHTML=all.slice(0,10).map((r,i)=>`
+    <li class="rank-item">
+      <span class="rank-num">${i+1}</span>
+      <div class="rank-info">
+        <div class="rank-name" title="${r.fornecedor}">${r.fornecedor}</div>
+        <div class="rank-cat">${r.categoria}</div>
+      </div>
+      <span class="rank-val">${fmtShort(r.a_liquidar)}</span>
+    </li>`).join('');
+}
+
+function renderAlert(){
+  const all=getAllRows().filter(r=>r.a_liquidar>100000);
+  const strip=document.getElementById('alertStrip');
+  if(all.length>0){
+    const total=all.reduce((s,r)=>s+r.a_liquidar,0);
+    document.getElementById('alertText').innerHTML=
+      `<strong>${all.length} fornecedor${all.length>1?'es':''}</strong> com valor a liquidar acima de R$ 100.000. Total em atenção: <strong>${fmt(total)}</strong>. Verifique possibilidade de remanejamento orçamentário.`;
+    strip.style.display='flex';
+  } else { strip.style.display='none'; }
+}
+
+function renderFilterBtns(){
+  const cats=['Todos',...Object.keys(DATA)];
+  document.getElementById('filterGroup').innerHTML=cats.map(c=>
+    `<button class="filter-btn${c===activeFilter?' active':''}" onclick="setFilter('${c}')">${c}</button>`
+  ).join('');
+}
+function setFilter(cat){ activeFilter=cat; renderFilterBtns(); filterRender(); }
+
+function filterRender(){
+  const q=document.getElementById('searchInput').value.toLowerCase();
+  const sort=document.getElementById('sortSelect').value;
+  const catTotals=getCatTotals();
+  const cats=activeFilter==='Todos'?Object.keys(DATA):[activeFilter];
+  const container=document.getElementById('categorySections');
+  container.innerHTML='';
+
+  cats.forEach(cat=>{
+    if(!DATA[cat]) return;
+    let rows=[...DATA[cat]];
+    if(q) rows=rows.filter(r=>r.fornecedor.toLowerCase().includes(q));
+    if(!rows.length) return;
+
+    rows.sort((a,b)=>{
+      if(sort==='a_liquidar_desc') return b.a_liquidar-a.a_liquidar;
+      if(sort==='a_liquidar_asc') return a.a_liquidar-b.a_liquidar;
+      if(sort==='empenhos_desc') return b.empenhos-a.empenhos;
+      if(sort==='pct_asc') return pct(a.liquidacoes,a.empenhos)-pct(b.liquidacoes,b.empenhos);
+      if(sort==='pct_desc') return pct(b.liquidacoes,b.empenhos)-pct(a.liquidacoes,a.empenhos);
+      return 0;
+    });
+
+    const tot=catTotals[cat];
+    const catId='cat_'+cat.replace(/[^a-z0-9]/gi,'_');
+    const sec=document.createElement('div');
+    sec.className='category-section';
+    sec.innerHTML=`
+      <div class="cat-header open" id="hdr_${catId}" onclick="toggleCat('${catId}')">
+        <div class="cat-icon">${CAT_ICONS[cat]||'📁'}</div>
+        <div class="cat-name">${cat}</div>
+        <div class="cat-badges">
+          <span class="badge badge-emp">Emp: ${fmtShort(tot.empenhos)}</span>
+          <span class="badge badge-liq">Liq: ${fmtShort(tot.liquidacoes)}</span>
+          <span class="badge ${tot.a_liquidar>50000?'badge-pend high':'badge-pend'}">▲ ${fmtShort(tot.a_liquidar)}</span>
+        </div>
+        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="cat-body open" id="body_${catId}">
+        <table>
+          <thead><tr>
+            <th>Fornecedor</th><th>Empenhado</th><th>Liquidado</th><th>% Exec.</th><th>A Liquidar</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(r=>{
+              const p=pct(r.liquidacoes,r.empenhos);
+              return `<tr>
+                <td><div class="supplier-name">${r.fornecedor}</div></td>
+                <td>${fmt(r.empenhos)}</td>
+                <td>${fmt(r.liquidacoes)}</td>
+                <td class="prog-cell">
+                  <div class="prog-wrap">
+                    <div class="prog-bar-bg"><div class="prog-bar-fill ${fillClass(p)}" style="width:${p.toFixed(1)}%"></div></div>
+                    <span class="prog-pct">${p.toFixed(0)}%</span>
+                  </div>
+                </td>
+                <td><span class="val-pend ${pendClass(r.a_liquidar,r.empenhos)}">${fmt(r.a_liquidar)}</span></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    container.appendChild(sec);
+  });
+}
+
+function toggleCat(id){
+  document.getElementById('hdr_'+id).classList.toggle('open');
+  document.getElementById('body_'+id).classList.toggle('open');
+}
+
+// ─── INIT ───
+document.getElementById('headerDate').textContent =
+  new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+
+loadData(); // carrega automaticamente ao abrir
+</script>
+</body>
+</html>
