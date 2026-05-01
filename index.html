@@ -286,15 +286,9 @@
 
 <script>
 // ─── CONFIGURAÇÃO ── altere apenas esta linha se mudar a planilha ───
-const SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQcgeHYoqpMtyGnzFVn3ci1vvAP4_PzKB_4RKpjTQ1ttC-QFJsipUfxGirurFfWCmPE9wWNwtAPxJQd/pub?gid=1727878372&single=true&output=csv";
-
-// Múltiplos proxies públicos — tenta um por um até funcionar
-const PROXIES = [
-  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://thingproxy.freeboard.io/fetch/${url}`,
-  url => `https://cors-anywhere.herokuapp.com/${url}`,
-];
+// ── URL do Google Apps Script (servidor do próprio Google, sem CORS) ──
+const SHEETS_CSV_URL = "https://script.google.com/macros/s/AKfycbyg7v-jYM1uou9DH-6BgpcNmK6R_Be87ovi9kRxJ99iojhpYB4Nk1HjqkOWyqlKwbCP/exec";
+const PROXIES = []; // Apps Script já resolve o CORS nativamente
 
 const CAT_ICONS = {
   'Condominiais':'🏢','D.E.A.':'💧','Diárias e Passagens':'✈️',
