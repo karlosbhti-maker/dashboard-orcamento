@@ -314,9 +314,12 @@ function fmtShort(v){
 function parseBR(s){
   if(!s) return 0;
   s = String(s).trim();
-  // Handle both Brazilian (1.234,56) and US (1234.56) formats
+  // Remove prefixo R$, espaços e caracteres especiais
+  s = s.replace(/R\$\s*/gi,'').replace(/@/g,'').trim();
+  // Remove traço sozinho (campo vazio no SIAFI)
+  if(s === '-' || s === '' || s === '—') return 0;
+  // Formato brasileiro: 1.234,56 -> remove pontos, troca vírgula por ponto
   if(s.includes(',') && s.includes('.')){
-    // Brazilian: remove dots, replace comma with dot
     s = s.replace(/\./g,'').replace(',','.');
   } else if(s.includes(',') && !s.includes('.')){
     s = s.replace(',','.');
@@ -370,7 +373,9 @@ function parseCSV(text){
     // normalize
     if(cat.toLowerCase()==='diárias e passagens'||cat.toLowerCase()==='diarias e passagens') cat='Diárias e Passagens';
 
-    const forn = (cols[iForn]||'').replace(/@/g,'').trim();
+    let forn = (cols[iForn]||'').replace(/@/g,'').trim();
+    // Remove CPF/CNPJ prefix se existir (ex: "34.330.513 FERNANDA..." -> "FERNANDA...")
+    forn = forn.replace(/^[\d]{2}[\.\d\/\-]+\s+/, '').trim();
     if(!forn) continue;
     // Remove @ e espaços dos valores numéricos antes de parsear
     const cleanVal = v => (v||'').replace(/@/g,'').trim();
