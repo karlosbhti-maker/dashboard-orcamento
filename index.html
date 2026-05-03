@@ -338,65 +338,65 @@ function fillClass(p){ if(p>=90) return 'fill-green'; if(p>=50) return 'fill-gol
 
 // ─── PARSE CSV ───
 function parseCSV(text){
-  const lines = text.split('\n').filter(l=>l.trim());
-  const headers = splitCSVLine(lines[0]);
-  
-  // Limpa cabeçalhos removendo @ e espaços extras
-  const cleanHeaders = headers.map(h => h.replace(/@/g,'').trim());
+  const allLines = text.split('\n');
 
-  // Busca coluna por termos (exato primeiro, depois parcial)
+  // Auto-detecta linha de cabeçalho buscando por colunas-chave
+  let headerIdx = -1;
+  let cleanHeaders = [];
+  for(let i=0;i<Math.min(allLines.length,10);i++){
+    const cols = splitCSVLine(allLines[i]).map(h=>h.replace(/@/g,'').trim());
+    if(cols.some(c=>c.toLowerCase().includes('cogeplan')) && cols.some(c=>c.toLowerCase().includes('empenho'))){
+      headerIdx=i; cleanHeaders=cols; break;
+    }
+  }
+
+  if(headerIdx<0){
+    console.log('CSV primeiras linhas:', allLines.slice(0,5));
+    throw new Error('Cabeçalho não encontrado. Colunas Classificação_Cogeplan e Empenhos são necessárias.');
+  }
+  console.log('Cabeçalho na linha', headerIdx, ':', cleanHeaders);
+
   const find = (...terms) => {
-    let idx = cleanHeaders.findIndex(h => terms.some(t => h.toLowerCase() === t.toLowerCase()));
-    if(idx >= 0) return idx;
+    let idx = cleanHeaders.findIndex(h => terms.some(t => h.toLowerCase()===t.toLowerCase()));
+    if(idx>=0) return idx;
     return cleanHeaders.findIndex(h => terms.some(t => h.toLowerCase().includes(t.toLowerCase())));
   };
 
-  const iCat  = find('Classificação_Cogeplan','classificacao_cogeplan','cogeplan','classif');
+  const iCat  = find('Classificação_Cogeplan','cogeplan','classif');
   const iForn = find('NE CCor - Favorecido','ne ccor - favorecido','favorec');
   const iEmp  = find('Empenhos','empenho');
-  const iLiq  = find('Liquidações','liquidações','liquidacoes','liquidac');
+  const iLiq  = find('Liquidações','liquidacoes','liquidac');
   const iPend = find('A Liquidar','a liquidar','liquidar');
-
-  console.log('Headers:', cleanHeaders);
   console.log('Indexes — Cat:',iCat,'Forn:',iForn,'Emp:',iEmp,'Liq:',iLiq,'Pend:',iPend);
 
-  if(iCat<0||iForn<0||iEmp<0){
-    throw new Error('Colunas não encontradas. Disponíveis: ' + cleanHeaders.join(' | '));
-  }
+  if(iCat<0||iForn<0||iEmp<0) throw new Error('Colunas não encontradas: '+cleanHeaders.join('|'));
 
   const map = {};
-  for(let i=1;i<lines.length;i++){
-    const cols = splitCSVLine(lines[i]);
-    // Debug primeira linha de dados
-    if(i===1) console.log('Primeira linha — Cat:', cols[iCat], '| Forn:', cols[iForn], '| Emp:', cols[iEmp], '| Liq:', cols[iLiq], '| Pend:', cols[iPend]);
+  for(let i=headerIdx+1;i<allLines.length;i++){
+    const line=allLines[i]; if(!line.trim()) continue;
+    const cols=splitCSVLine(line);
+    if(i<=headerIdx+2) console.log('Linha '+(i-headerIdx)+' — Cat:',cols[iCat],'Emp:',cols[iEmp],'Liq:',cols[iLiq],'Pend:',cols[iPend]);
     if(!cols[iCat]) continue;
-    let cat = cols[iCat].trim();
+    let cat=(cols[iCat]||'').replace(/@/g,'').trim();
     if(!cat) continue;
-    // normalize
-    if(cat.toLowerCase()==='diárias e passagens'||cat.toLowerCase()==='diarias e passagens') cat='Diárias e Passagens';
-
-    let forn = (cols[iForn]||'').replace(/@/g,'').trim();
-    // Remove CPF/CNPJ prefix se existir (ex: "34.330.513 FERNANDA..." -> "FERNANDA...")
-    forn = forn.replace(/^[\d]{2}[\.\d\/\-]+\s+/, '').trim();
+    if(/di.rias/i.test(cat)) cat='Diárias e Passagens';
+    let forn=(cols[iForn]||'').replace(/@/g,'').trim();
+    forn=forn.replace(/^\d[\d.\/\-]+ /,'').trim();
     if(!forn) continue;
-    // Remove @ e espaços dos valores numéricos antes de parsear
-    const cleanVal = v => (v||'').replace(/@/g,'').trim();
-    const emp  = parseBR(cleanVal(cols[iEmp]));
-    const liq  = parseBR(iLiq>=0 ? cleanVal(cols[iLiq]) : '0');
-    const pend = iPend>=0 ? parseBR(cleanVal(cols[iPend])) : emp-liq;
-
-    const key = cat+'|||'+forn;
+    const cv=v=>(v||'').replace(/@/g,'').trim();
+    const emp=parseBR(cv(cols[iEmp]));
+    const liq=parseBR(iLiq>=0?cv(cols[iLiq]):'0');
+    const pend=iPend>=0?parseBR(cv(cols[iPend])):emp-liq;
+    const key=cat+'|||'+forn;
     if(!map[key]) map[key]={categoria:cat,fornecedor:forn,empenhos:0,liquidacoes:0,a_liquidar:0};
-    map[key].empenhos   += emp;
-    map[key].liquidacoes+= liq;
-    map[key].a_liquidar += pend;
+    map[key].empenhos+=emp; map[key].liquidacoes+=liq; map[key].a_liquidar+=pend;
   }
 
   const result={};
   Object.values(map).forEach(r=>{
-    r.empenhos   = Math.round(r.empenhos*100)/100;
-    r.liquidacoes= Math.round(r.liquidacoes*100)/100;
-    r.a_liquidar = Math.round(r.a_liquidar*100)/100;
+    r.empenhos=Math.round(r.empenhos*100)/100;
+    r.liquidacoes=Math.round(r.liquidacoes*100)/100;
+    r.a_liquidar=Math.round(r.a_liquidar*100)/100;
     if(Math.abs(r.empenhos)<0.01) return;
     if(!result[r.categoria]) result[r.categoria]=[];
     result[r.categoria].push(r);
