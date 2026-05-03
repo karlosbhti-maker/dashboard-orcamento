@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | Consulta de Saldos Diários (Dark Mode)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0f172a',
+                        darkCard: '#1e293b',
+                        darkBorder: '#334155',
+                        brandBlue: '#3b82f6',
+                        brandGreen: '#10b981',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f8fafc; }
+        
+        /* Custom Scrollbar Dark */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* Card Hover */
+        .result-card { transition: all 0.2s ease-in-out; cursor: pointer; }
+        .result-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); border-color: #3b82f6; }
+        
+        /* Upload Area */
+        .upload-area.dragover { background-color: rgba(59, 130, 246, 0.1); border-color: #3b82f6; }
+
+        /* Modal Animations */
+        .modal-active { overflow: hidden; }
+        #detailsModal { backdrop-filter: blur(5px); }
+        .modal-content { animation: scaleUp 0.2s ease-out; }
+        @keyframes scaleUp {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-darkCard shadow-md border-b border-darkBorder sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <div class="bg-brandBlue text-white p-2.5 rounded-lg shadow-lg shadow-blue-500/20">
+                    <i class="fas fa-database text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-white tracking-wide">Consulta Diária de Saldos</h1>
+                    <p class="text-xs text-slate-400">Sistema Local de Monitoramento</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div id="statusBadge" class="hidden items-center gap-2 bg-emerald-500/10 text-brandGreen border border-emerald-500/20 px-3 py-1.5 rounded-full text-sm font-medium">
+                    <i class="fas fa-circle text-[10px] animate-pulse"></i> <span id="lastUpdateText">ao vivo</span>
+                </div>
+                <button id="refreshBtn" onclick="loadData()" class="flex items-center gap-2 bg-brandBlue text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition font-medium text-sm shadow-lg shadow-blue-500/20">
+                    <i class="fas fa-sync-alt" id="refreshIcon"></i> Atualizar
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+        
+        <!-- Loading Screen -->
+        <div id="uploadSection" class="bg-darkCard rounded-2xl shadow-xl border border-darkBorder p-10 mb-8 text-center transition-colors">
+            <div class="flex flex-col items-center justify-center space-y-5">
+                <div id="loadingIcon" class="text-brandBlue text-5xl animate-spin">
+                    <i class="fas fa-circle-notch"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-white mb-2" id="loadingTitle">Carregando dados...</h2>
+                    <p class="text-sm text-slate-400 max-w-md mx-auto" id="loadingSubtitle">Buscando planilha atualizada do Google Sheets</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Content -->
+        <div id="dashboardContent" class="hidden space-y-8">
+            
+            <!-- Summary KPI Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-darkCard rounded-xl shadow-lg border border-darkBorder p-6 flex items-center gap-5 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-brandBlue opacity-5 rounded-bl-full -mr-4 -mt-4"></div>
+                    <div class="bg-slate-800 text-brandBlue w-14 h-14 rounded-xl flex items-center justify-center text-2xl shadow-inner border border-slate-700 z-10">
+                        <i class="fas fa-wallet"></i>
+                    </div>
+                    <div class="z-10">
+                        <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-1">Saldo Total</p>
+                        <h3 id="kpiTotalSaldo" class="text-2xl font-bold text-white tracking-tight">R$ 0,00</h3>
+                    </div>
+                </div>
+                <div class="bg-darkCard rounded-xl shadow-lg border border-darkBorder p-6 flex items-center gap-5 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-purple-500 opacity-5 rounded-bl-full -mr-4 -mt-4"></div>
+                    <div class="bg-slate-800 text-purple-400 w-14 h-14 rounded-xl flex items-center justify-center text-2xl shadow-inner border border-slate-700 z-10">
+                        <i class="fas fa-folder-open"></i>
+                    </div>
+                    <div class="z-10">
+                        <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-1">Processos</p>
+                        <h3 id="kpiTotalProcessos" class="text-2xl font-bold text-white tracking-tight">0</h3>
+                    </div>
+                </div>
+                <div class="bg-darkCard rounded-xl shadow-lg border border-darkBorder p-6 flex items-center gap-5 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-emerald-500 opacity-5 rounded-bl-full -mr-4 -mt-4"></div>
+                    <div class="bg-slate-800 text-brandGreen w-14 h-14 rounded-xl flex items-center justify-center text-2xl shadow-inner border border-slate-700 z-10">
+                        <i class="fas fa-building"></i>
+                    </div>
+                    <div class="z-10">
+                        <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-1">Favorecidos</p>
+                        <h3 id="kpiTotalFavorecidos" class="text-2xl font-bold text-white tracking-tight">0</h3>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="bg-darkCard rounded-xl shadow-lg border border-darkBorder p-6">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <i class="fas fa-sliders-h text-brandBlue"></i> Filtros de Pesquisa
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                            <i class="fas fa-search text-slate-500"></i>
+                        </div>
+                        <input type="text" id="searchGlobal" placeholder="Busca geral..." class="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-brandBlue focus:border-transparent outline-none transition-all text-sm shadow-inner">
+                    </div>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                            <i class="fas fa-fingerprint text-slate-500"></i>
+                        </div>
+                        <input type="text" id="searchProcesso" placeholder="Nº Processo..." class="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-brandBlue focus:border-transparent outline-none transition-all text-sm shadow-inner">
+                    </div>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                            <i class="fas fa-users text-slate-500"></i>
+                        </div>
+                        <input type="text" id="searchFavorecido" placeholder="Favorecido..." class="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-brandBlue focus:border-transparent outline-none transition-all text-sm shadow-inner">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Grid (Print 1 Style) -->
+            <div id="resultsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <!-- Cards JS -->
+            </div>
+            
+            <!-- Empty State -->
+            <div id="emptyState" class="hidden flex flex-col items-center justify-center py-16 text-slate-500">
+                <i class="fas fa-box-open text-5xl mb-4 text-slate-600"></i>
+                <p class="text-xl font-medium text-slate-300 mb-1">Nenhum resultado</p>
+                <p class="text-sm">Tente ajustar seus termos de pesquisa.</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal for Details (Print 2 Style) -->
+    <div id="detailsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 transition-opacity">
+        <div class="modal-content bg-darkCard w-full max-w-3xl rounded-2xl shadow-2xl border border-darkBorder flex flex-col max-h-[90vh]">
+            
+            <!-- Modal Header -->
+            <div class="px-6 py-4 border-b border-darkBorder flex justify-between items-center bg-slate-800/50 rounded-t-2xl">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-brandBlue/10 flex items-center justify-center border border-brandBlue/20 text-brandBlue">
+                        <i class="fas fa-file-invoice"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-brandBlue font-bold uppercase tracking-wider">Detalhes do Processo</p>
+                        <h2 id="modalTitleProcesso" class="text-lg font-bold text-white">---</h2>
+                    </div>
+                </div>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white hover:bg-slate-700 p-2 rounded-lg transition-colors focus:outline-none">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <!-- Modal Body -->
+            <div class="p-6 overflow-y-auto flex-grow custom-scrollbar">
+                
+                <!-- Highlights Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <div class="bg-slate-800/80 rounded-xl p-5 border border-slate-700">
+                        <p class="text-sm text-slate-400 font-medium mb-1"><i class="fas fa-building mr-1"></i> Favorecido</p>
+                        <p id="modalFavorecido" class="text-base font-bold text-white">---</p>
+                    </div>
+                    <div class="bg-slate-800/80 rounded-xl p-5 border border-slate-700 border-l-4" id="modalSaldoCard">
+                        <p class="text-sm text-slate-400 font-medium mb-1"><i class="fas fa-wallet mr-1"></i> Saldo Disponível</p>
+                        <p id="modalSaldo" class="text-2xl font-bold tracking-tight">R$ 0,00</p>
+                    </div>
+                </div>
+
+                <!-- Complete Data Grid -->
+                <h3 class="text-sm font-bold text-slate-300 uppercase tracking-widest mb-4 pb-2 border-b border-darkBorder">Informações Completas</h3>
+                <div id="modalExtraDetails" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-6 gap-x-4">
+                    <!-- Fields injected here -->
+                </div>
+            </div>
+            
+            <!-- Modal Footer -->
+            <div class="px-6 py-4 border-t border-darkBorder bg-slate-800/50 rounded-b-2xl flex justify-end">
+                <button onclick="closeModal()" class="px-5 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-slate-500">
+                    Fechar Consulta
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ── CONFIGURAÇÃO ── só mude esta linha se trocar a planilha ──
+        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw9yTGTeorom8MfsfUyphc1TKOM0gS4nE4g224GaxpqLcNTk_fZtUyX9hmI4_dDqpfVzA/exec";
+
+        let allData = [];
+        let filteredData = [];
+        let headers = [];
+
+        // Índices das colunas — detectados automaticamente pelo nome
+        let IDX_FAVORECIDO = 7;
+        let IDX_PROCESSO = 12;
+        let IDX_SALDO = 17;
+        
+        const modal = document.getElementById('detailsModal');
+        const body = document.body;
+
+        // ── Parse CSV ──
+        function parseCSV(text) {
+            return text.split('\n').map(line => {
+                const result=[]; let cur=''; let inQ=false;
+                for(let i=0;i<line.length;i++){
+                    const c=line[i];
+                    if(c==='"'){inQ=!inQ;}
+                    else if(c===','&&!inQ){result.push(cur.trim());cur='';}
+                    else{cur+=c;}
+                }
+                result.push(cur.trim());
+                return result;
+            }).filter(r=>r.some(c=>c!==''));
+        }
+
+        // ── Auto-detecta colunas ──
+        function detectIndexes(headerRow) {
+            const h = headerRow.map(c=>String(c).toLowerCase().trim());
+            const find = (...terms) => {
+                let i=h.findIndex(c=>terms.some(t=>c===t.toLowerCase()));
+                if(i>=0) return i;
+                return h.findIndex(c=>terms.some(t=>c.includes(t.toLowerCase())));
+            };
+            IDX_FAVORECIDO = find('favorecido','ne ccor - favorecido','fornecedor');
+            IDX_PROCESSO   = find('processo','ne ccor - núm. processo','num. processo','número','ne ccor - num. processo');
+            IDX_SALDO      = find('saldo','a liquidar','saldo atual','valor');
+            console.log('Colunas — Favorecido:',IDX_FAVORECIDO,'| Processo:',IDX_PROCESSO,'| Saldo:',IDX_SALDO);
+            console.log('Headers:', headerRow);
+        }
+
+        // ── Carrega do Apps Script ──
+        async function loadData() {
+            const btn=document.getElementById('refreshBtn');
+            const icon=document.getElementById('refreshIcon');
+            btn.disabled=true; icon.className='fas fa-sync-alt animate-spin';
+
+            const sec=document.getElementById('uploadSection');
+            sec.style.display='block';
+            document.getElementById('dashboardContent').classList.add('hidden');
+            document.getElementById('loadingTitle').textContent='Carregando dados...';
+            document.getElementById('loadingSubtitle').textContent='Buscando planilha atualizada do Google Sheets';
+            document.getElementById('loadingIcon').className='text-brandBlue text-5xl animate-spin';
+            document.getElementById('loadingIcon').innerHTML='<i class="fas fa-circle-notch"></i>';
+
+            try {
+                const resp=await fetch(APPS_SCRIPT_URL+'?t='+Date.now(),{cache:'no-cache'});
+                if(!resp.ok) throw new Error('HTTP '+resp.status);
+                const text=await resp.text();
+                const rows=parseCSV(text);
+                if(rows.length<2) throw new Error('Planilha sem dados.');
+
+                headers=rows[0];
+                detectIndexes(headers);
+                allData=rows.slice(1).filter(r=>r.length>1&&(r[IDX_PROCESSO]||r[IDX_FAVORECIDO]));
+                filteredData=[...allData];
+
+                const now=new Date();
+                document.getElementById('lastUpdateText').textContent=
+                    now.toLocaleDateString('pt-BR')+' às '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+
+                sec.style.display='none';
+                document.getElementById('dashboardContent').classList.remove('hidden');
+                document.getElementById('statusBadge').classList.remove('hidden');
+                document.getElementById('statusBadge').classList.add('flex');
+                renderDashboard();
+            } catch(err) {
+                document.getElementById('loadingIcon').className='text-red-400 text-5xl';
+                document.getElementById('loadingIcon').innerHTML='<i class="fas fa-exclamation-circle"></i>';
+                document.getElementById('loadingTitle').textContent='Erro ao carregar';
+                document.getElementById('loadingSubtitle').textContent=err.message+' — Clique em Atualizar para tentar novamente.';
+            }
+            btn.disabled=false; icon.className='fas fa-sync-alt';
+        }
+
+        // Search Filters
+        document.getElementById('searchGlobal').addEventListener('input', applyFilters);
+        document.getElementById('searchProcesso').addEventListener('input', applyFilters);
+        document.getElementById('searchFavorecido').addEventListener('input', applyFilters);
+
+        function applyFilters() {
+            const globalTerm = document.getElementById('searchGlobal').value.toLowerCase();
+            const processoTerm = document.getElementById('searchProcesso').value.toLowerCase();
+            const favorecidoTerm = document.getElementById('searchFavorecido').value.toLowerCase();
+
+            filteredData = allData.filter(row => {
+                const processo = String(row[IDX_PROCESSO] || '').toLowerCase();
+                const favorecido = String(row[IDX_FAVORECIDO] || '').toLowerCase();
+                const allRowText = row.join(' ').toLowerCase();
+
+                return processo.includes(processoTerm) && 
+                       favorecido.includes(favorecidoTerm) && 
+                       allRowText.includes(globalTerm);
+            });
+
+            renderDashboard();
+        }
+
+        function parseBRValue(value) {
+            let v = String(value||'').trim();
+            v = v.replace(/R\$\s*/gi,'').trim();   // remove R$
+            if(v==='-'||v===''||v==='—') return 0;
+            // Formato BR: 1.124,33 -> tem ponto como milhar e vírgula como decimal
+            // Formato US: 1124.33 -> tem ponto como decimal
+            if(v.includes(',') && v.includes('.')) {
+                // BR: remove pontos de milhar, troca vírgula por ponto decimal
+                v = v.replace(/\./g,'').replace(',','.');
+            } else if(v.includes(',') && !v.includes('.')) {
+                // Só vírgula: é o separador decimal BR
+                v = v.replace(',','.');
+            }
+            // Se só tem ponto: já é formato US, não precisa mexer
+            return parseFloat(v) || 0;
+        }
+
+        function formatCurrency(value) {
+            const num = parseBRValue(value);
+            if (isNaN(num)) return "R$ 0,00";
+            return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+        }
+
+        function openModal(rowIndex) {
+            const row = filteredData[rowIndex];
+            if(!row) return;
+
+            const processo = row[IDX_PROCESSO] || 'N/A';
+            const favorecido = row[IDX_FAVORECIDO] || 'Não Informado';
+            let saldoVal = parseBRValue(row[IDX_SALDO]);
+            if (isNaN(saldoVal)) saldoVal = 0;
+
+            const isPositivo = saldoVal >= 0;
+            
+            // Header Info
+            document.getElementById('modalTitleProcesso').innerText = processo;
+            document.getElementById('modalFavorecido').innerText = favorecido;
+            
+            // Saldo Style in Modal
+            const modalSaldoEl = document.getElementById('modalSaldo');
+            const modalSaldoCard = document.getElementById('modalSaldoCard');
+            modalSaldoEl.innerText = formatCurrency(saldoVal);
+            
+            if(isPositivo) {
+                modalSaldoEl.className = 'text-2xl font-bold tracking-tight text-brandGreen';
+                modalSaldoCard.style.borderLeftColor = '#10b981';
+            } else {
+                modalSaldoEl.className = 'text-2xl font-bold tracking-tight text-red-400';
+                modalSaldoCard.style.borderLeftColor = '#f87171';
+            }
+
+            // Populate Grid Data
+            const detailsGrid = document.getElementById('modalExtraDetails');
+            let detailsHTML = '';
+            
+            headers.forEach((header, i) => {
+                // Pulando as colunas que já estão em destaque no topo do modal
+                if(i !== IDX_FAVORECIDO && i !== IDX_PROCESSO && i !== IDX_SALDO) {
+                    const value = row[i] !== undefined && row[i] !== '' ? row[i] : '-';
+                    detailsHTML += `
+                        <div class="bg-slate-800/40 p-3 rounded-lg border border-slate-700/50 hover:bg-slate-800 transition-colors">
+                            <span class="text-[11px] text-slate-500 font-semibold uppercase block mb-1 tracking-wider">${header}</span>
+                            <span class="text-sm text-slate-200 font-medium break-words">${value}</span>
+                        </div>
+                    `;
+                }
+            });
+            
+            detailsGrid.innerHTML = detailsHTML;
+
+            // Show Modal
+            modal.classList.remove('hidden');
+            body.classList.add('modal-active');
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            body.classList.remove('modal-active');
+        }
+
+        // Close modal on click outside
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeModal();
+        });
+        
+        // Close modal on Esc key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+        });
+
+        // ── Carrega automaticamente ao abrir ──
+        loadData();
+
+        function renderDashboard() {
+            const container = document.getElementById('resultsContainer');
+            const emptyState = document.getElementById('emptyState');
+            container.innerHTML = '';
+            
+            let totalSaldo = 0;
+            const setFavorecidos = new Set();
+
+            if(filteredData.length === 0) {
+                container.style.display = 'none';
+                emptyState.style.display = 'flex';
+                updateKPIs(0, 0, 0);
+                return;
+            }
+
+            container.style.display = 'grid';
+            emptyState.style.display = 'none';
+
+            filteredData.forEach((row, index) => {
+                const processo = row[IDX_PROCESSO] || 'N/A';
+                const favorecido = row[IDX_FAVORECIDO] || 'Não Informado';
+                let saldoVal = parseBRValue(row[IDX_SALDO]);
+                if (isNaN(saldoVal)) saldoVal = 0;
+                
+                totalSaldo += saldoVal;
+                setFavorecidos.add(favorecido);
+
+                const isPositivo = saldoVal >= 0;
+                const saldoColorClass = isPositivo ? 'text-brandGreen' : 'text-red-400';
+                const bgStatusIcon = isPositivo ? 'bg-emerald-500/10 border-emerald-500/20 text-brandGreen' : 'bg-red-500/10 border-red-500/20 text-red-400';
+
+                // Print 1 Style Card
+                const card = document.createElement('div');
+                card.className = 'result-card bg-darkCard rounded-xl border border-darkBorder p-5 flex flex-col h-full';
+                card.onclick = () => openModal(index);
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="flex-1 pr-3 overflow-hidden">
+                            <div class="flex items-center gap-2 mb-1.5">
+                                <span class="w-2 h-2 rounded-full ${isPositivo ? 'bg-brandGreen' : 'bg-red-500'}"></span>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Processo</p>
+                            </div>
+                            <h4 class="text-base font-bold text-white truncate" title="${processo}">${processo}</h4>
+                        </div>
+                        <div class="w-10 h-10 rounded-lg border ${bgStatusIcon} flex items-center justify-center flex-shrink-0 shadow-inner">
+                            <i class="fas ${isPositivo ? 'fa-check' : 'fa-exclamation'}"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-5 flex-grow">
+                        <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Favorecido</p>
+                        <p class="text-sm font-medium text-slate-300 line-clamp-2" title="${favorecido}">${favorecido}</p>
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-700/50 flex items-center justify-between mt-auto">
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Saldo</p>
+                            <p class="${saldoColorClass} text-lg font-bold">${formatCurrency(saldoVal)}</p>
+                        </div>
+                        <div class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 hover:text-white hover:border-brandBlue transition-colors shadow-sm">
+                            <i class="fas fa-arrow-right text-sm"></i>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+
+            updateKPIs(totalSaldo, filteredData.length, setFavorecidos.size);
+        }
+
+        function updateKPIs(saldo, processos, favorecidos) {
+            document.getElementById('kpiTotalSaldo').innerText = formatCurrency(saldo);
+            document.getElementById('kpiTotalProcessos').innerText = processos.toLocaleString('pt-BR');
+            document.getElementById('kpiTotalFavorecidos').innerText = favorecidos.toLocaleString('pt-BR');
+        }
+    </script>
+</body>
+</html>
