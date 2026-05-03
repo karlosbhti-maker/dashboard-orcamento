@@ -367,6 +367,8 @@ function parseCSV(text){
   const map = {};
   for(let i=1;i<lines.length;i++){
     const cols = splitCSVLine(lines[i]);
+    // Debug primeira linha de dados
+    if(i===1) console.log('Primeira linha — Cat:', cols[iCat], '| Forn:', cols[iForn], '| Emp:', cols[iEmp], '| Liq:', cols[iLiq], '| Pend:', cols[iPend]);
     if(!cols[iCat]) continue;
     let cat = cols[iCat].trim();
     if(!cat) continue;
